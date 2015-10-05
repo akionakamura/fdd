@@ -15,6 +15,7 @@ setup(name='fdd',
       install_requires=[
           'markdown',
           'sklearn',
+          'numpy',
       ],
       zip_safe=False,
       test_suite='nose.collector',
