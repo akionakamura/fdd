@@ -22,12 +22,14 @@ class OperationMode:
                  model,
                  kind,
                  status,
+                 model_id,
                  name='unnamed',
                  n_samples=10000,
                  confidence=0.99):
         self.model = model
         self.kind = kind
         self.status = status
+        self.model_id = model_id
         self.name = name
         self.confidence = confidence
         self.threshold = monte_carlo_threshold(self, n_samples, confidence)
@@ -67,4 +69,4 @@ def monte_carlo_threshold(op, n_sample, confidence):
     logprob_sample, _ = op.model.score_samples(sample)
     sorted_logprob_sample = np.sort(logprob_sample)
     threshold = sorted_logprob_sample[int(np.round(n_sample*(1-confidence)))]
-    return threshold
+    return -threshold
