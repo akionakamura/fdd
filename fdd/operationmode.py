@@ -61,6 +61,9 @@ class OperationMode:
     def get_threshold(self):
         return self.threshold
 
+    def set_threshold(self, tr):
+        self.threshold = tr
+
 
 def monte_carlo_threshold(op, n_sample, confidence):
     logging.info('Obtaining the threshold with %.2f degre of significance for the %s operation mode.'

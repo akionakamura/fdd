@@ -75,6 +75,7 @@ class FDD:
                                                     self.verbose,
                                                     self.n_jobs,
                                                     self.n_iter_search)
+        tr = threshold_by_data(pgmm_model, data, confidence=self.confidence)
         model = OperationMode(model=pgmm_model,
                               kind=kind,
                               status=status,
@@ -82,10 +83,8 @@ class FDD:
                               name=name,
                               n_samples=self.n_samples,
                               confidence=self.confidence)
+        model.set_threshold(tr)
         self.models.append(model)
-
-    def dummy_function(self):
-        print 'This is a dummy function.'
 
     def monitor(self, data, model_id=0):
         n = data.shape[0]
@@ -101,14 +100,13 @@ class FDD:
         data_out = data[idx_out,]
         return -logprob_train, op_mode.threshold, out, num_out, data_out, op_mode.model_id
 
-
     def monitor_all(self, data):
         n = data.shape[0]
         num_out_best = n
         best_model_id = 0
         for model in self.models:
             _, _, out, num_out, _, _ = self.monitor(data, model.model_id)
-            if (num_out < num_out_best):
+            if num_out < num_out_best:
                 num_out_best = num_out
                 best_model_id = model.model_id
 
@@ -130,13 +128,22 @@ class FDD:
                 print(self.models[id2].model)
                 if out2:
                     print('Unrecognized behaviour, training a new model.')
-                    out_perct = num_out2 / len(data_out)
+                    out_perct = float(num_out2) / len(data_out)
                     print(out_perct)
                     self.train(data_out, 'Fault'+ str(len(self.models)), 'OK')
             else:
                 print('Normal operation condition detected.')
 
             return out
+
+
+
+def threshold_by_data(pgmm, data, confidence):
+    n_samples = data.shape[0]
+    logprob, _ = pgmm.score_samples(data)
+    sorted_logprob = np.sort(logprob)
+    threshold = sorted_logprob[int(np.round(n_samples*(1-confidence)))]
+    return -threshold
 
 
 def cartesian(arrays, out=None):
@@ -208,7 +215,7 @@ def train_with_parameters(params, data_broadcast):
     covariance_type = covar_type_int[params[2]]
     model = PGMM(n_components=n_components,
                  n_pc=n_pc,
-                 covariance_type=covariance_type)
+                 covariance_type=covariance_type, tol=1e-6)
     model.fit(data)
     return model.bic(data), model
 
