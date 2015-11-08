@@ -75,7 +75,6 @@ class FDD:
                                                     self.verbose,
                                                     self.n_jobs,
                                                     self.n_iter_search)
-        tr = threshold_by_data(pgmm_model, data, confidence=self.confidence)
         model = OperationMode(model=pgmm_model,
                               kind=kind,
                               status=status,
@@ -83,22 +82,25 @@ class FDD:
                               name=name,
                               n_samples=self.n_samples,
                               confidence=self.confidence)
-        model.set_threshold(tr)
+        # tr = threshold_by_data(pgmm_model, data, confidence=self.confidence)
+        # model.set_threshold(tr)
         self.models.append(model)
 
     def monitor(self, data, model_id=0):
+        gamma = 0.6
         n = data.shape[0]
         # Get Operation Mode
         op_mode = self.models[model_id]
         # Compute the limit of out-of-bounds sample to be detected as out of the model.
         limit = np.round(binom.ppf(op_mode.confidence, n, 1-op_mode.confidence))
         # Compute the log likelihood.
-        logprob_train, responsability_train = op_mode.model.score_samples(data)
-        idx_out = -logprob_train > op_mode.threshold
+        logprob, responsability = op_mode.model.score_samples(data)
+        filtered_stats = exponential_filter(logprob, gamma)
+        idx_out = -filtered_stats > op_mode.threshold
         num_out = np.sum(idx_out)
         out = num_out > limit
         data_out = data[idx_out,]
-        return -logprob_train, op_mode.threshold, out, num_out, data_out, op_mode.model_id
+        return -filtered_stats, op_mode.threshold, out, num_out, data_out, op_mode.model_id
 
     def monitor_all(self, data):
         n = data.shape[0]
@@ -118,7 +120,8 @@ class FDD:
             self.train(data, 'Normal Condition', 'Normal', 'OK')
             return False
         else:
-            stats, threhold, out, num_out, data_out, id = self.monitor(data, 0)
+            stats, threshold, out, num_out, data_out, id = self.monitor(data, 0)
+            print(num_out)
             if out:
                 print('Out of normal operation condition detected.')
                 stats2, threhold2, out2, num_out2, data_out2, id2 = self.monitor_all(data_out)
@@ -134,8 +137,17 @@ class FDD:
             else:
                 print('Normal operation condition detected.')
 
-            return out
+            return stats, threshold
 
+
+def exponential_filter(stats, gamma):
+    n = stats.shape[0]
+    filtered = np.zeros(n)
+    filtered[0] = stats[0]
+    for i in np.arange(n-1)+1:
+        filtered[i] = (1-gamma)*filtered[i-1] + gamma*stats[i]
+
+    return filtered
 
 
 def threshold_by_data(pgmm, data, confidence):
