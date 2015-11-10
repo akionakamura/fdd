@@ -3,9 +3,10 @@ import logging
 
 from sklearn.mixture import PGMM
 from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
-from pyspark import SparkConf, SparkContext
+from pyspark import SparkConf, SparkContext, StorageLevel
 from scipy.stats import binom
 import numpy as np
+import math
 
 from operationmode import OperationMode
 
@@ -61,7 +62,19 @@ class FDD:
         self.confidence = confidence
         self.models = []
 
-    def train(self, data, name, kind='normal', status='OK'):
+    def set_op_name(self, id, name):
+        self.models[id].set_name(name)
+
+    def set_op_status(self, id, status):
+        self.models[id].set_status(status)
+
+    def set_op_kind(self, id, kind):
+        self.models[id].set_kind(kind)
+
+    def get_op(self, id):
+        return self.models[id]
+
+    def train(self, data, name='unnamed', kind='undefined', status='pending_eval'):
         logging.info('Training starting...')
         train_dict = {
             'random': _train_random,
@@ -75,16 +88,20 @@ class FDD:
                                                     self.verbose,
                                                     self.n_jobs,
                                                     self.n_iter_search)
-        model = OperationMode(model=pgmm_model,
-                              kind=kind,
-                              status=status,
-                              model_id=len(self.models),
-                              name=name,
-                              n_samples=self.n_samples,
-                              confidence=self.confidence)
-        # tr = threshold_by_data(pgmm_model, data, confidence=self.confidence)
-        # model.set_threshold(tr)
-        self.models.append(model)
+        if pgmm_model is None:
+            return None
+        else:
+            model = OperationMode(model=pgmm_model,
+                                  kind=kind,
+                                  status=status,
+                                  model_id=len(self.models),
+                                  name=name,
+                                  n_samples=self.n_samples,
+                                  confidence=self.confidence)
+            tr = threshold_by_data(pgmm_model, data, confidence=self.confidence)
+            model.set_threshold(tr)
+            self.models.append(model)
+            return model.model_id
 
     def monitor(self, data, model_id=0):
         gamma = 0.6
@@ -100,44 +117,58 @@ class FDD:
         num_out = np.sum(idx_out)
         out = num_out > limit
         data_out = data[idx_out,]
-        return -filtered_stats, op_mode.threshold, out, num_out, data_out, op_mode.model_id
+        return -filtered_stats, op_mode.threshold, out, num_out, data_out, model_id
 
     def monitor_all(self, data):
         n = data.shape[0]
-        num_out_best = n
+        best_stats = np.zeros(n)
+        best_threshold = 1e9
+        best_out = False
+        best_num_out = n+1
+        best_data_out = np.zeros(data.shape)
         best_model_id = 0
         for model in self.models:
-            _, _, out, num_out, _, _ = self.monitor(data, model.model_id)
-            if num_out < num_out_best:
-                num_out_best = num_out
+            stats, threshold, out, num_out, data_out, id = self.monitor(data, model.model_id)
+            if num_out < best_num_out:
+                best_stats = stats
+                best_threshold = threshold
+                best_out = out
+                best_num_out = num_out
+                best_data_out = data_out
                 best_model_id = model.model_id
 
-        return self.monitor(data, best_model_id)
+        return best_stats, best_threshold, best_out, best_num_out, best_data_out, best_model_id
 
     def fdd(self, data):
         if (len(self.models) <= 0):
             print('There is no model registered, creating a normal one.')
-            self.train(data, 'Normal Condition', 'Normal', 'OK')
-            return False
+            new_id = self.train(data, 'Normal Condition', 'Normal', 'OK')
+            if new_id is None:
+                is_new = False
+            else:
+                is_new = True
+            return [], [], [], [], new_id, is_new
         else:
-            stats, threshold, out, num_out, data_out, id = self.monitor(data, 0)
-            print(num_out)
-            if out:
+            stats_normal, threshold_normal, out_normal, num_out_normal, data_out_normal, _ = self.monitor(data)
+            if out_normal:
                 print('Out of normal operation condition detected.')
-                stats2, threhold2, out2, num_out2, data_out2, id2 = self.monitor_all(data_out)
-                print('The best fitting model found was: ' + self.models[id2].name)
-                print(out2)
-                print(num_out2)
-                print(self.models[id2].model)
-                if out2:
+                stats, threshold, out, num_out, data_out, id = self.monitor_all(data_out_normal)
+                if out:
                     print('Unrecognized behaviour, training a new model.')
-                    out_perct = float(num_out2) / len(data_out)
-                    print(out_perct)
-                    self.train(data_out, 'Fault'+ str(len(self.models)), 'OK')
+                    print(num_out)
+                    new_id = self.train(data_out)
+                    if new_id is None:
+                        return stats, threshold, [], [], new_id, False
+                    else:
+                        new_stats, new_threshold, new_out, new_num_out, new_data_out, new_id = self.monitor(data, new_id)
+                        return stats_normal, threshold_normal, new_stats, new_threshold, new_id, True
+                else:
+                    print('Operation mode classified as: ' + self.models[id].name)
+                    fault_stats, fault_threshold, fault_out, fault_num_out, fault_data_out, fault_id = self.monitor(data, id)
+                    return stats_normal, threshold_normal, fault_stats, fault_threshold, fault_id, False
             else:
                 print('Normal operation condition detected.')
-
-            return stats, threshold
+                return stats_normal, threshold_normal, [], [], self.models[0].model_id, False
 
 
 def exponential_filter(stats, gamma):
@@ -228,8 +259,11 @@ def train_with_parameters(params, data_broadcast):
     model = PGMM(n_components=n_components,
                  n_pc=n_pc,
                  covariance_type=covariance_type, tol=1e-6)
-    model.fit(data)
-    return model.bic(data), model
+    try:
+        model.fit(data)
+        return model.bic(data), model
+    except:
+        return float("inf"), None
 
 
 def _train_spark(data, n_components, n_pc, covar_types, verbose, n_jobs, n_iter_search):
@@ -245,6 +279,7 @@ def _train_spark(data, n_components, n_pc, covar_types, verbose, n_jobs, n_iter_
     parameters_rdd = sc.parallelize(parameters, n_jobs)
     data_broadcast = sc.broadcast(data)
     models = parameters_rdd.map(lambda param: train_with_parameters(param, data_broadcast))
+    models.persist(StorageLevel(True, True, False, True, 1))
     sorted_models = models.sortBy(lambda model: model[0])
     best_model = sorted_models.collect()[0][1]
     sc.stop()
