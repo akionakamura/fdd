@@ -236,7 +236,7 @@ def cartesian(arrays, out=None):
         cartesian(arrays[1:], out=out[0:m,1:])
         for j in xrange(1, arrays[0].size):
             out[j*m:(j+1)*m,1:] = out[0:m,1:]
-    return out
+    return np.random.permutation(out)
 
 
 covar_type_int = {1: 'RRR',
