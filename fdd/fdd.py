@@ -277,7 +277,7 @@ def _train_spark(data, n_components, n_pc, covar_types, verbose, n_jobs, n_iter_
     parameters = cartesian((n_components,
                             n_pc,
                             covar_types))
-    parameters_rdd = sc.parallelize(parameters, n_jobs)
+    parameters_rdd = sc.parallelize(parameters, 96)
     data_broadcast = sc.broadcast(data)
     models = parameters_rdd.map(lambda param: train_with_parameters(param, data_broadcast))
     models.persist(StorageLevel(True, True, False, True, 1))
