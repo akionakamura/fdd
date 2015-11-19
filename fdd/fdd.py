@@ -268,9 +268,10 @@ def train_with_parameters(params, data_broadcast):
 
 def _train_spark(data, n_components, n_pc, covar_types, verbose, n_jobs, n_iter_search):
     conf = (SparkConf()
-             .setMaster("local[*]")
+             .setMaster("local[" + str(n_jobs) + "]")
              .setAppName("FDD")
-             .set("spark.executor.memory", "2g"))
+             .set("spark.executor.memory", "512mb")
+             .set("spark.cores.max", str(n_jobs)))
     sc = SparkContext(conf=conf)
 
     parameters = cartesian((n_components,
