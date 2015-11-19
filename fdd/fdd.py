@@ -104,7 +104,7 @@ class FDD:
             return model.model_id
 
     def monitor(self, data, model_id=0):
-        gamma = 0.6
+        gamma = 0.4
         n = data.shape[0]
         # Get Operation Mode
         op_mode = self.models[model_id]
