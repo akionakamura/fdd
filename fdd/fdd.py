@@ -141,11 +141,8 @@ class FDD:
 
     def fdd(self, data):
         n, d = data.shape
-        reconstructed_data = np.empty((n, d))
-        reconstructed_score = np.empty(d)
-        for feature in range(d):
-            rec_x, reconstructed_score[feature] = self.models[0].reconstruct_one_missing(data, feature)
-            reconstructed_data[:, feature] = rec_x[:, feature]
+        # reconstructed_data = np.empty((n, d))
+        # reconstructed_score = np.empty(d)
 
         if (len(self.models) <= 0):
             print('There is no model registered, creating a normal one.')
@@ -154,28 +151,31 @@ class FDD:
                 is_new = False
             else:
                 is_new = True
-            return [], [], [], [], new_id, is_new, reconstructed_data, reconstructed_score
+            return [], [], [], [], new_id, is_new
         else:
+            # for feature in range(d):
+            #     rec_x, reconstructed_score[feature] = self.models[0].reconstruct_one_missing(data, feature)
+            #     reconstructed_data[:, feature] = rec_x[:, feature]
             stats_normal, threshold_normal, out_normal, num_out_normal, data_out_normal, _ = self.monitor(data)
             if out_normal:
                 print('Out of normal operation condition detected.')
-                stats, threshold, out, num_out, data_out, id, reconstructed_data, reconstructed_score = self.monitor_all(data_out_normal)
+                stats, threshold, out, num_out, data_out, id = self.monitor_all(data_out_normal)
                 if out:
                     print('Unrecognized behaviour, training a new model.')
                     print(num_out)
                     new_id = self.train(data_out)
                     if new_id is None:
-                        return stats, threshold, [], [], new_id, False, reconstructed_data, reconstructed_score
+                        return stats, threshold, [], [], new_id, False
                     else:
                         new_stats, new_threshold, new_out, new_num_out, new_data_out, new_id = self.monitor(data, new_id)
-                        return stats_normal, threshold_normal, new_stats, new_threshold, new_id, True, reconstructed_data, reconstructed_score
+                        return stats_normal, threshold_normal, new_stats, new_threshold, new_id, True
                 else:
                     print('Operation mode classified as: ' + self.models[id].name)
                     fault_stats, fault_threshold, fault_out, fault_num_out, fault_data_out, fault_id = self.monitor(data, id)
-                    return stats_normal, threshold_normal, fault_stats, fault_threshold, fault_id, False, reconstructed_data, reconstructed_score
+                    return stats_normal, threshold_normal, fault_stats, fault_threshold, fault_id, False
             else:
                 print('Normal operation condition detected.')
-                return stats_normal, threshold_normal, [], [], self.models[0].model_id, False, reconstructed_data, reconstructed_score
+                return stats_normal, threshold_normal, [], [], self.models[0].model_id, False
 
 
 def exponential_filter(stats, gamma):
