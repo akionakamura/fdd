@@ -5,6 +5,7 @@ from sklearn.datasets import make_blobs
 from numpy.testing import assert_array_almost_equal
 from scipy.stats import randint
 
+# TODO Complete test cases.
 class TestFDD(TestCase):
     def test_default_creation(self):
         my_fdd = FDD()

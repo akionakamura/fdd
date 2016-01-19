@@ -65,6 +65,7 @@ class OperationMode:
         self.threshold = tr
 
 
+# Computes the threshold via Monte Carlo simulations.
 def monte_carlo_threshold(op, n_sample, confidence):
     logging.info('Obtaining the threshold with %.2f degre of significance for the %s operation mode.'
                  % (confidence, op.name))
